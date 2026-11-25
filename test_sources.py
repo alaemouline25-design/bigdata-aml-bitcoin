@@ -1,122 +1,105 @@
-"""test_sources.py - Jalon J1 : tester les sources et noter leurs limites.
+"""test_sources_tx.py - Jalon J1 : 3 questions precises sur mempool.space.
 
-Usage :
-  python test_sources.py                                   # REST mempool.space
-  python test_sources.py --ws                              # + WebSocket (30 s)
-  python test_sources.py --elliptic-dir data/raw/elliptic  # inspecte les CSV Elliptic
+Q1. Que renvoie le detail d'UNE transaction ? (entrees/sorties disponibles ?)
+Q2. Combien de transactions NOUVELLES voit-on en interrogeant /mempool/recent ?
+Q3. Que se passe-t-il si on enchaine ~20 appels de detail (latence, limitation) ?
 
-Principe : on ne SUPPOSE aucun nom de champ. On affiche ce que la source
-renvoie reellement, et on garde le resultat dans docs/resultats_J1_sources.json
-pour le cahier des charges.
+Usage :  python test_sources_tx.py
+Resultat : docs/resultats_J1_tx.json  (aucun champ suppose : on affiche le reel)
+Le test est volontairement SOBRE (peu d'appels, pauses) : ne pas l'augmenter,
+pour ne pas se faire bloquer et respecter les conditions d'utilisation.
 """
-import argparse
-import asyncio
 import json
 import time
 from pathlib import Path
 
 import requests
 
-BASE = "https://mempool.space/api"  # a verifier : https://mempool.space/docs/api/rest
+BASE = "https://mempool.space/api"  # chemins a confirmer dans la doc
 HEADERS = {"User-Agent": "ensias-bigdata-projet/0.1 (projet pedagogique)"}
 
 
-def test_rest():
-    """Appelle 2 endpoints REST et releve statut, latence, limites eventuelles."""
-    out = {}
-    endpoints = [("hauteur_bloc", "/blocks/tip/height"),
-                 ("mempool_recent", "/mempool/recent")]  # chemins a confirmer dans la doc
-    for nom, chemin in endpoints:
-        t0 = time.time()
-        try:
-            r = requests.get(BASE + chemin, headers=HEADERS, timeout=15)
-            info = {
-                "statut": r.status_code,
-                "latence_s": round(time.time() - t0, 2),
-                # En-tetes de quota s'ils existent (sinon dict vide = a noter)
-                "en_tetes_quota": {k: v for k, v in r.headers.items()
-                                   if k.lower().startswith(("x-ratelimit", "retry-after"))},
-            }
-            if r.ok:
-                try:
-                    corps = r.json()
-                except ValueError:
-                    corps = r.text
-                if isinstance(corps, list):
-                    info["nb_elements"] = len(corps)
-                    if corps and isinstance(corps[0], dict):
-                        # Les VRAIS champs renvoyes : a recopier dans le schema JSON Kafka
-                        info["champs_premier_element"] = sorted(corps[0].keys())
-                else:
-                    info["apercu"] = str(corps)[:100]
-            out[nom] = info
-        except requests.RequestException as e:
-            out[nom] = {"erreur": str(e)}  # ex. blocage reseau du Codespace : a noter
-    return out
+def get(chemin):
+    """GET avec mesure de latence. Retourne (reponse, latence en secondes)."""
+    t0 = time.time()
+    r = requests.get(BASE + chemin, headers=HEADERS, timeout=15)
+    return r, round(time.time() - t0, 2)
 
 
-async def test_ws(duree=30):
-    """Ouvre la WebSocket et compte les messages recus pendant `duree` secondes."""
-    import websockets  # pip install websockets
-
-    url = "wss://mempool.space/api/v1/ws"  # a confirmer dans la doc
-    stats = {"messages": 0, "cles_recues": set()}
+def structure_tx(txid):
+    """Q1 : champs du detail d'une transaction (endpoint /tx/<txid> a confirmer)."""
+    info = {}
     try:
-        async with websockets.connect(url) as ws:
-            # Abonnement "blocks" : message a verifier dans la doc. Le flux de
-            # NOUVELLES transactions demande peut-etre un autre abonnement : a
-            # chercher dans la doc avant J3.
-            await ws.send(json.dumps({"action": "want", "data": ["blocks"]}))
-            fin = time.time() + duree
-            while time.time() < fin:
-                try:
-                    msg = await asyncio.wait_for(ws.recv(), timeout=max(0.1, fin - time.time()))
-                except asyncio.TimeoutError:
-                    break
-                stats["messages"] += 1
-                try:
-                    stats["cles_recues"].update(json.loads(msg).keys())
-                except Exception:
-                    pass
-    except Exception as e:
-        stats["erreur"] = str(e)
-    stats["cles_recues"] = sorted(stats["cles_recues"])
-    return stats
+        r, lat = get(f"/tx/{txid}")
+        info = {"statut": r.status_code, "latence_s": lat}
+        if r.ok:
+            d = r.json()
+            info["champs"] = sorted(d.keys())
+            # Pour chaque champ qui est une liste : sa taille (ex. entrees/sorties
+            # si elles existent). On ne suppose pas les noms, on les releve.
+            info["tailles_listes"] = {k: len(v) for k, v in d.items() if isinstance(v, list)}
+    except (requests.RequestException, ValueError, AttributeError) as e:
+        info["erreur"] = str(e)
+    return info
 
 
-def inspecter_elliptic(dossier):
-    """Pour chaque CSV : taille, nb de lignes, 2 premieres lignes brutes."""
-    out = {}
-    for f in sorted(Path(dossier).glob("*.csv")):
-        with open(f, encoding="utf-8") as fh:
-            lignes = [next(fh).rstrip() for _ in range(2)]
-            nb = 2 + sum(1 for _ in fh)
-        info = {"taille_Mo": round(f.stat().st_size / 1e6, 1),
-                "nb_lignes_total": nb,
-                "2_premieres_lignes": [l[:120] for l in lignes]}
-        if "class" in f.name.lower():
-            import pandas as pd
-            df = pd.read_csv(f)
-            # Repartition licite / illicite / inconnu : a verifier sur le fichier
-            info["repartition_derniere_colonne"] = df.iloc[:, -1].value_counts().to_dict()
-        out[f.name] = info
-    return out
+def debit_flux(duree=60, pas=5):
+    """Q2 : on interroge /mempool/recent toutes les `pas` s pendant `duree` s
+    et on compte les txid distincts vus. Retourne (resume, liste de txid)."""
+    vus, appels, erreurs = set(), 0, 0
+    fin = time.time() + duree
+    while time.time() < fin:
+        try:
+            r, _ = get("/mempool/recent")
+            appels += 1
+            if r.ok:
+                vus.update(t["txid"] for t in r.json()
+                           if isinstance(t, dict) and "txid" in t)
+            else:
+                erreurs += 1
+        except (requests.RequestException, ValueError):
+            erreurs += 1
+        time.sleep(pas)
+    resume = {"duree_s": duree, "pas_s": pas, "appels": appels,
+              "erreurs": erreurs, "txid_distincts_vus": len(vus)}
+    return resume, sorted(vus)
+
+
+def rafale(txids, n=20):
+    """Q3 : n appels /tx a la suite (pause 0,5 s). On releve statuts, latences
+    et tout signe de limitation (code 429, en-tetes de quota)."""
+    statuts, lats, quota = {}, [], {}
+    for txid in txids[:n]:
+        try:
+            r, lat = get(f"/tx/{txid}")
+            statuts[str(r.status_code)] = statuts.get(str(r.status_code), 0) + 1
+            lats.append(lat)
+            for k, v in r.headers.items():
+                if k.lower().startswith(("x-ratelimit", "retry-after")):
+                    quota[k] = v
+        except requests.RequestException:
+            statuts["erreur"] = statuts.get("erreur", 0) + 1
+        time.sleep(0.5)
+    return {"appels_tentes": min(n, len(txids)), "statuts": statuts,
+            "latence_min_s": min(lats) if lats else None,
+            "latence_max_s": max(lats) if lats else None,
+            "en_tetes_quota": quota}
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--ws", action="store_true", help="tester aussi la WebSocket")
-    p.add_argument("--elliptic-dir", help="dossier contenant les CSV Elliptic")
-    a = p.parse_args()
-
-    resultats = {"mempool_rest": test_rest()}
-    if a.ws:
-        resultats["mempool_ws"] = asyncio.run(test_ws())
-    if a.elliptic_dir:
-        resultats["elliptic"] = inspecter_elliptic(a.elliptic_dir)
+    resultats = {}
+    print("Q2 : interrogation de /mempool/recent pendant 60 s...", flush=True)
+    resultats["debit_flux"], txids = debit_flux()
+    if txids:
+        print("Q1 : detail d'une transaction...", flush=True)
+        resultats["detail_tx"] = structure_tx(txids[0])
+        print("Q3 : rafale de 20 appels...", flush=True)
+        resultats["rafale_tx"] = rafale(txids)
+    else:
+        resultats["remarque"] = "aucun txid recupere : Q1 et Q3 non testees"
 
     Path("docs").mkdir(exist_ok=True)
-    Path("docs/resultats_J1_sources.json").write_text(
+    Path("docs/resultats_J1_tx.json").write_text(
         json.dumps(resultats, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(resultats, indent=2, ensure_ascii=False))
 
