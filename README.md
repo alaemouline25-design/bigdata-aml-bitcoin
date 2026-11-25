@@ -30,8 +30,8 @@ Peut-on détecter les transactions illicites à partir de la structure du graphe
     ml/                    forêt aléatoire, GCN
     airflow/               DAG
     app/                   interface Streamlit
-    test_sources.py        test des sources : mempool.space et fichiers Elliptic (J1)
-    test_sources_tx.py     test du flux mempool.space : détail, débit, rafale (J1)
+    test_sources.py        la source répond-elle ? mempool.space et fichiers Elliptic (J1)
+    test_sources_tx.py     la source suffit-elle ? graphe, saturation du flux, débit de détail (J1)
 
 ## Installation (Windows, PowerShell)
 
@@ -48,13 +48,22 @@ Télécharger le jeu Elliptic sur Kaggle (`ellipticco/elliptic-data-set`) et pla
 ## Tests des sources (J1)
 
     python test_sources.py --ws --elliptic-dir data\raw\elliptic
-    python test_sources_tx.py
+    python test_sources_tx.py --reseau <nom-du-reseau>
 
-Les résultats sont enregistrés dans `docs/resultats_J1_sources.json` et `docs/resultats_J1_tx.json`.
+L'option `--reseau` est obligatoire : elle nomme le réseau testé (par exemple `partage-mobile`, `ensias`, `codespace`) et produit un fichier de résultats par réseau, pour comparer les accès.
+
+Résultats : `docs/resultats_J1_sources.json` et `docs/resultats_J1_tx_<reseau>.json`.
+
+`test_sources_tx.py` répond à trois questions :
+1. Le détail d'une transaction permet-il de construire des arêtes du graphe ? (structure de `vin` et `vout` sur deux niveaux, sans rien supposer)
+2. Le sondage de `/mempool/recent` capte-t-il tout le flux, ou sature-t-il ?
+3. À quel débit effectif peut-on enchaîner les appels de détail ?
 
 ## Résultats des tests de sources (J1)
 
 ### mempool.space (flux direct)
+
+Les mesures ci-dessous viennent d'une première version du test (fichier `docs/resultats_J1_tx.json`). Les résultats de la version actuelle, par réseau, sont à ajouter après exécution.
 
 | Mesure | Résultat |
 |---|---|
@@ -64,6 +73,8 @@ Les résultats sont enregistrés dans `docs/resultats_J1_sources.json` et `docs/
 | Détail `/tx/<txid>` | statut 200 ; champs `fee`, `locktime`, `sigops`, `size`, `status`, `txid`, `version`, `vin`, `vout`, `weight` ; listes `vin` et `vout` présentes |
 | Rafale de 20 appels de détail | 20 × statut 200, latence de 0,77 à 1,06 s, aucun en-tête de quota |
 | WebSocket | 1 message reçu (clé `blocks`) ; l'abonnement aux nouvelles transactions reste à identifier dans la doc |
+| Contenu de `vin` et `vout` | à mesurer (test_sources_tx.py, question 1) |
+| Appels saturés, débit effectif | à mesurer (test_sources_tx.py, questions 2 et 3) |
 
 L'absence d'en-tête de quota ne prouve pas l'absence de limite : les conditions d'utilisation restent à lire.
 
@@ -87,6 +98,7 @@ Correspondance des classes à confirmer (`1` = illicite et `2` = licite d'après
 - Le flux direct n'a **pas d'étiquettes** : le modèle n'y est pas validé.
 - L'interrogation périodique de `/mempool/recent` ne capture qu'un échantillon des transactions.
 - Chaque détail de transaction demande un appel d'environ 1 s : l'enrichissement se limite à un sous-ensemble.
+- Construire des arêtes du graphe en direct suppose qu'une entrée référence la transaction qu'elle dépense : à vérifier (question 1 du test).
 - Accès à mempool.space intermittent : le rejeu d'Elliptic reste la source de secours et de démonstration.
 
 ## Règles méthodologiques
