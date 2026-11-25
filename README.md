@@ -50,9 +50,9 @@ Télécharger le jeu Elliptic sur Kaggle (`ellipticco/elliptic-data-set`) et pla
     python test_sources.py --ws --elliptic-dir data\raw\elliptic
     python test_sources_tx.py --reseau <nom-du-reseau>
 
-L'option `--reseau` est obligatoire : elle nomme le réseau testé (par exemple `partage-mobile`, `ensias`, `codespace`) et produit un fichier de résultats par réseau, pour comparer les accès.
+L'option `--reseau` est obligatoire : elle nomme le réseau testé (par exemple `maison`, `partage-mobile`, `ensias`, `codespace`) et produit un fichier de résultats par réseau, pour comparer les accès.
 
-Résultats : `docs/resultats_J1_sources.json` et `docs/resultats_J1_tx_<reseau>.json`.
+Résultats : `docs/resultats_J1_sources.json`, `docs/resultats_J1_tx.json` (première version du test) et `docs/resultats_J1_tx_<reseau>.json`.
 
 `test_sources_tx.py` répond à trois questions :
 1. Le détail d'une transaction permet-il de construire des arêtes du graphe ? (structure de `vin` et `vout` sur deux niveaux, sans rien supposer)
@@ -63,18 +63,18 @@ Résultats : `docs/resultats_J1_sources.json` et `docs/resultats_J1_tx_<reseau>.
 
 ### mempool.space (flux direct)
 
-Les mesures ci-dessous viennent d'une première version du test (fichier `docs/resultats_J1_tx.json`). Les résultats de la version actuelle, par réseau, sont à ajouter après exécution.
-
 | Mesure | Résultat |
 |---|---|
 | Accès REST | statut 200, environ 1 s par appel ; **premier essai en timeout** (REST et WebSocket) : accès intermittent |
-| `/mempool/recent` | 10 transactions par appel ; champs `fee`, `txid`, `value`, `vsize` (pas d'entrées ni de sorties) |
-| Débit observé | 109 `txid` distincts en 60 s (11 appels, 0 erreur) : **échantillon**, le débit réel est probablement plus élevé |
-| Détail `/tx/<txid>` | statut 200 ; champs `fee`, `locktime`, `sigops`, `size`, `status`, `txid`, `version`, `vin`, `vout`, `weight` ; listes `vin` et `vout` présentes |
-| Rafale de 20 appels de détail | 20 × statut 200, latence de 0,77 à 1,06 s, aucun en-tête de quota |
+| `/mempool/recent` | 10 transactions par appel ; champs `fee`, `txid`, `value`, `vsize` (pas d'entrées ni de sorties) ; sens exact de `value` à confirmer dans la doc |
+| Sondage de `/mempool/recent` (réseau maison) | 10 appels en 60 s, 0 erreur, 100 `txid` distincts ; **9 appels sur 9** (hors le premier) composés uniquement de transactions nouvelles : le sondage sature et des transactions sont manquées entre deux appels. 100 est une borne inférieure du flux réel (première version du test : 109 `txid` distincts en 11 appels) |
+| Détail `/tx/<txid>` | statut 200 ; champs `txid`, `version`, `locktime`, `vin`, `vout`, `size`, `weight`, `sigops`, `fee`, `status` |
+| Contenu de `vin` | `txid`, `vout`, `prevout`, `scriptsig`, `scriptsig_asm`, `is_coinbase`, `sequence` ; `prevout` contient `scriptpubkey`, `scriptpubkey_asm`, `scriptpubkey_type`, `scriptpubkey_address`, `value` |
+| Contenu de `vout` | `scriptpubkey`, `scriptpubkey_asm`, `scriptpubkey_type`, `scriptpubkey_address`, `value` ; aucun lien vers la transaction qui dépense la sortie (dans l'élément observé) |
+| Arêtes du graphe | chaque entrée porte `txid` et `vout` (référence de la sortie dépensée, d'après la structure Bitcoin, à confirmer dans la doc) : arêtes « transaction parente -> transaction » constructibles ; arêtes sortantes non fournies |
+| Rafale de détails | 20 appels, 20 × statut 200, latence de 0,58 à 1,15 s, débit effectif 0,82 requête/s (pause de 0,5 s), aucun en-tête de quota |
 | WebSocket | 1 message reçu (clé `blocks`) ; l'abonnement aux nouvelles transactions reste à identifier dans la doc |
-| Contenu de `vin` et `vout` | à mesurer (test_sources_tx.py, question 1) |
-| Appels saturés, débit effectif | à mesurer (test_sources_tx.py, questions 2 et 3) |
+| Autres réseaux | à tester : `partage-mobile`, `codespace` (et `ensias`) |
 
 L'absence d'en-tête de quota ne prouve pas l'absence de limite : les conditions d'utilisation restent à lire.
 
@@ -96,9 +96,10 @@ Correspondance des classes à confirmer (`1` = illicite et `2` = licite d'après
 
 - Les attributs d'Elliptic sont anonymisés : aucun lien documenté avec les champs calculables sur le flux direct. Tout attribut recalculé en direct est un **proxy**.
 - Le flux direct n'a **pas d'étiquettes** : le modèle n'y est pas validé.
-- L'interrogation périodique de `/mempool/recent` ne capture qu'un échantillon des transactions.
-- Chaque détail de transaction demande un appel d'environ 1 s : l'enrichissement se limite à un sous-ensemble.
-- Construire des arêtes du graphe en direct suppose qu'une entrée référence la transaction qu'elle dépense : à vérifier (question 1 du test).
+- Le sondage de `/mempool/recent` sature : il ne capture qu'un échantillon des transactions.
+- Le graphe direct est **partiel** : on obtient les liens vers les transactions parentes (via `vin`), mais pas vers les transactions qui dépenseront les sorties. Les attributs des parents demandent un appel de détail supplémentaire chacun.
+- Chaque détail de transaction demande un appel d'environ 1 s (environ 0,8 requête/s mesuré) : l'enrichissement se limite à un sous-ensemble.
+- Les adresses (`scriptpubkey_address`) sont des identifiants pseudonymes : elles ne sont jamais stockées en clair (hachage avant stockage, loi 09-08) ni versionnées.
 - Accès à mempool.space intermittent : le rejeu d'Elliptic reste la source de secours et de démonstration.
 
 ## Règles méthodologiques

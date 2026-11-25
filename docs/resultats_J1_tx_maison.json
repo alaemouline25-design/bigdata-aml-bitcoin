@@ -1,0 +1,87 @@
+{
+  "reseau": "maison",
+  "horodatage_utc": "2026-11-25T18:33:34+00:00",
+  "debit_flux": {
+    "duree_s": 60,
+    "pas_s": 5,
+    "appels_reussis": 10,
+    "erreurs": 0,
+    "txid_distincts_vus": 100,
+    "nouveaux_par_appel": [
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10,
+      10
+    ],
+    "appels_satures": 9,
+    "lecture": "borne inferieure du flux reel ; appels_satures > 0 => transactions manquees"
+  },
+  "detail_tx": {
+    "txid_teste": "028cbbd644414973e1c3cbe959e81b6c0788a73f7e3bafea309dde0d75454b20",
+    "statut": 200,
+    "latence_s": 0.65,
+    "champs": {
+      "txid": "str",
+      "version": "int",
+      "locktime": "int",
+      "vin": "list",
+      "vout": "list",
+      "size": "int",
+      "weight": "int",
+      "sigops": "int",
+      "fee": "int",
+      "status": "dict"
+    },
+    "listes": {
+      "vin": {
+        "taille": 1,
+        "cles_premier_element": {
+          "txid": "str",
+          "vout": "int",
+          "prevout": "dict",
+          "scriptsig": "str",
+          "scriptsig_asm": "str",
+          "is_coinbase": "bool",
+          "sequence": "int"
+        },
+        "sous_objets": {
+          "prevout": {
+            "scriptpubkey": "str",
+            "scriptpubkey_asm": "str",
+            "scriptpubkey_type": "str",
+            "scriptpubkey_address": "str",
+            "value": "int"
+          }
+        }
+      },
+      "vout": {
+        "taille": 1,
+        "cles_premier_element": {
+          "scriptpubkey": "str",
+          "scriptpubkey_asm": "str",
+          "scriptpubkey_type": "str",
+          "scriptpubkey_address": "str",
+          "value": "int"
+        },
+        "sous_objets": {}
+      }
+    }
+  },
+  "rafale_tx": {
+    "appels_tentes": 20,
+    "statuts": {
+      "200": 20
+    },
+    "latence_min_s": 0.58,
+    "latence_max_s": 1.15,
+    "debit_effectif_req_s": 0.82,
+    "en_tetes_quota": {},
+    "lecture": "aucun 429 = ce debit est tolere ; cela ne prouve pas l'absence de limite"
+  }
+}
