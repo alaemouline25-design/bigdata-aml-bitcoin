@@ -8,11 +8,11 @@ Peut-on détecter les transactions illicites à partir de la structure du graphe
 
 ## Architecture
 
-    Direct       : mempool.space -> producteur Python -> Kafka -> Spark Structured Streaming -> alertes MongoDB
-    Historique   : jeu Elliptic (Kaggle) -> Delta Lake (Bronze / Silver / Gold) -> entraînement des modèles
-    Secours      : simulateur de rejeu d'Elliptic -> Kafka (débit réglable)
-    Orchestration: Airflow (collecte et contrôles qualité)
-    Interface    : application Streamlit (état de la chaîne, alertes, résultats des modèles)
+    Direct        : mempool.space -> producteur Python -> Kafka -> Spark Structured Streaming -> alertes MongoDB
+    Historique    : jeu Elliptic (Kaggle) -> Delta Lake (Bronze / Silver / Gold) -> entraînement des modèles
+    Secours       : simulateur de rejeu d'Elliptic -> Kafka (débit réglable)
+    Orchestration : Airflow (collecte et contrôles qualité)
+    Interface     : application Streamlit (état de la chaîne, alertes, résultats des modèles)
 
 ## Équipe
 
@@ -22,14 +22,16 @@ Peut-on détecter les transactions illicites à partir de la structure du graphe
 
 ## Structure du dépôt
 
-    docs/         cahier des charges, schémas JSON, usage_ia.md
-    data/raw/     données brutes (Elliptic), non versionnées
-    producer/     producteur et simulateur de rejeu
-    streaming/    jobs Spark Structured Streaming
-    lakehouse/    couches Bronze / Silver / Gold
-    ml/           forêt aléatoire, GCN
-    airflow/      DAG
-    app/          interface Streamlit
+    docs/                  cahier des charges, résultats des tests, schémas JSON, usage_ia.md
+    data/raw/              données brutes (Elliptic), non versionnées
+    producer/              producteur et simulateur de rejeu
+    streaming/             jobs Spark Structured Streaming
+    lakehouse/             couches Bronze / Silver / Gold
+    ml/                    forêt aléatoire, GCN
+    airflow/               DAG
+    app/                   interface Streamlit
+    test_sources.py        test des sources : mempool.space et fichiers Elliptic (J1)
+    test_sources_tx.py     test du flux mempool.space : détail, débit, rafale (J1)
 
 ## Installation (Windows, PowerShell)
 
@@ -41,14 +43,58 @@ Peut-on détecter les transactions illicites à partir de la structure du graphe
 
 Créer un fichier `.env` à partir du modèle `.env.example` et y renseigner `MONGODB_URI`. Ce fichier n'est jamais versionné.
 
-Les données Elliptic sont à télécharger sur Kaggle et à placer dans `data/raw/elliptic`.
+Télécharger le jeu Elliptic sur Kaggle (`ellipticco/elliptic-data-set`) et placer les 3 fichiers CSV dans `data/raw/elliptic`.
+
+## Tests des sources (J1)
+
+    python test_sources.py --ws --elliptic-dir data\raw\elliptic
+    python test_sources_tx.py
+
+Les résultats sont enregistrés dans `docs/resultats_J1_sources.json` et `docs/resultats_J1_tx.json`.
+
+## Résultats des tests de sources (J1)
+
+### mempool.space (flux direct)
+
+| Mesure | Résultat |
+|---|---|
+| Accès REST | statut 200, environ 1 s par appel ; **premier essai en timeout** (REST et WebSocket) : accès intermittent |
+| `/mempool/recent` | 10 transactions par appel ; champs `fee`, `txid`, `value`, `vsize` (pas d'entrées ni de sorties) |
+| Débit observé | 109 `txid` distincts en 60 s (11 appels, 0 erreur) : **échantillon**, le débit réel est probablement plus élevé |
+| Détail `/tx/<txid>` | statut 200 ; champs `fee`, `locktime`, `sigops`, `size`, `status`, `txid`, `version`, `vin`, `vout`, `weight` ; listes `vin` et `vout` présentes |
+| Rafale de 20 appels de détail | 20 × statut 200, latence de 0,77 à 1,06 s, aucun en-tête de quota |
+| WebSocket | 1 message reçu (clé `blocks`) ; l'abonnement aux nouvelles transactions reste à identifier dans la doc |
+
+L'absence d'en-tête de quota ne prouve pas l'absence de limite : les conditions d'utilisation restent à lire.
+
+### Elliptic (historique)
+
+| Mesure | Résultat |
+|---|---|
+| Transactions | 203 769 |
+| Arêtes | 234 355 |
+| `unknown` | 157 205 (environ 77,1 %) |
+| Classe `2` | 42 019 (environ 20,6 %) |
+| Classe `1` | 4 545 (environ 2,2 %) |
+| Transactions étiquetées | 46 564, dont environ 9,8 % de classe `1` |
+| Fichier des attributs | 689,7 Mo, sans en-tête |
+
+Correspondance des classes à confirmer (`1` = illicite et `2` = licite d'après la description du jeu). Nombre de colonnes et pas de temps à vérifier.
+
+## Limites et points ouverts
+
+- Les attributs d'Elliptic sont anonymisés : aucun lien documenté avec les champs calculables sur le flux direct. Tout attribut recalculé en direct est un **proxy**.
+- Le flux direct n'a **pas d'étiquettes** : le modèle n'y est pas validé.
+- L'interrogation périodique de `/mempool/recent` ne capture qu'un échantillon des transactions.
+- Chaque détail de transaction demande un appel d'environ 1 s : l'enrichissement se limite à un sous-ensemble.
+- Accès à mempool.space intermittent : le rejeu d'Elliptic reste la source de secours et de démonstration.
 
 ## Règles méthodologiques
 
 - Découpage train/test temporel, jamais aléatoire.
 - Transactions « inconnues » exclues de l'entraînement et de l'évaluation.
 - Évaluation par précision, rappel et F1 de la classe illicite (pas l'accuracy).
-- Le flux direct n'a pas d'étiquettes : le modèle n'y est pas validé.
+- Comparaison minimale : forêt aléatoire sur attributs locaux, forêt aléatoire locaux + agrégés, puis GCN.
 
 ## Jalons
 
