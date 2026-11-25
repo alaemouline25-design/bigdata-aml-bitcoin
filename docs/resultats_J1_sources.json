@@ -1,0 +1,59 @@
+{
+  "mempool_rest": {
+    "hauteur_bloc": {
+      "statut": 200,
+      "latence_s": 0.99,
+      "en_tetes_quota": {},
+      "apercu": "977522"
+    },
+    "mempool_recent": {
+      "statut": 200,
+      "latence_s": 0.86,
+      "en_tetes_quota": {},
+      "nb_elements": 10,
+      "champs_premier_element": [
+        "fee",
+        "txid",
+        "value",
+        "vsize"
+      ]
+    }
+  },
+  "mempool_ws": {
+    "messages": 1,
+    "cles_recues": [
+      "blocks"
+    ]
+  },
+  "elliptic": {
+    "elliptic_txs_classes.csv": {
+      "taille_Mo": 3.3,
+      "nb_lignes_total": 203770,
+      "2_premieres_lignes": [
+        "txId,class",
+        "230425980,unknown"
+      ],
+      "repartition_derniere_colonne": {
+        "unknown": 157205,
+        "2": 42019,
+        "1": 4545
+      }
+    },
+    "elliptic_txs_edgelist.csv": {
+      "taille_Mo": 4.5,
+      "nb_lignes_total": 234356,
+      "2_premieres_lignes": [
+        "txId1,txId2",
+        "230425980,5530458"
+      ]
+    },
+    "elliptic_txs_features.csv": {
+      "taille_Mo": 689.7,
+      "nb_lignes_total": 203769,
+      "2_premieres_lignes": [
+        "230425980,1,-0.1714692896288031,-0.18466755143291433,-1.2013688016765636,-0.12196959975910057,-0.04387454791734898,-0.11",
+        "5530458,1,-0.17148421069432254,-0.18466755143291433,-1.2013688016765636,-0.12196959975910057,-0.04387454791734898,-0.113"
+      ]
+    }
+  }
+}

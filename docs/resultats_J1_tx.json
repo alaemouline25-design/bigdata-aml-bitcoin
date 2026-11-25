@@ -1,0 +1,39 @@
+{
+  "debit_flux": {
+    "duree_s": 60,
+    "pas_s": 5,
+    "appels": 11,
+    "erreurs": 0,
+    "txid_distincts_vus": 100
+  },
+  "detail_tx": {
+    "statut": 200,
+    "latence_s": 1.12,
+    "champs": [
+      "fee",
+      "locktime",
+      "sigops",
+      "size",
+      "status",
+      "txid",
+      "version",
+      "vin",
+      "vout",
+      "weight"
+    ],
+    "tailles_listes": {
+      "vin": 1,
+      "vout": 2
+    }
+  },
+  "rafale_tx": {
+    "appels_tentes": 20,
+    "statuts": {
+      "200": 19,
+      "404": 1
+    },
+    "latence_min_s": 0.84,
+    "latence_max_s": 1.44,
+    "en_tetes_quota": {}
+  }
+}
