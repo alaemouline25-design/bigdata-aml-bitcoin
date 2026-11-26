@@ -1,0 +1,15 @@
+{
+  "reseau": "codespace",
+  "horodatage_utc": "2026-11-26T12:05:49+00:00",
+  "debit_flux": {
+    "duree_s": 60,
+    "pas_s": 5,
+    "appels_reussis": 0,
+    "erreurs": 1,
+    "txid_distincts_vus": 0,
+    "nouveaux_par_appel": [],
+    "appels_satures": 0,
+    "lecture": "borne inferieure du flux reel ; appels_satures > 0 => transactions manquees"
+  },
+  "remarque": "aucun txid recupere : Q1 et Q3 non testees"
+}
